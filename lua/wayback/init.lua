@@ -9,7 +9,7 @@ local M = {}
 -- ============================================================================
 M.config = {
   scan_window_secs = 24 * 3600, -- default: only look at the last 24h of undo history
-  extensions = nil,             -- e.g. { "lua", "py" }; nil/empty = no filtering
+  extensions = nil, -- e.g. { "lua", "py" }; nil/empty = no filtering
   delta_cmd = "delta --paging=always "
     .. "--file-style=omit --file-decoration-style=omit "
     .. "--hunk-header-style=omit --hunk-header-decoration-style=omit "
@@ -23,37 +23,51 @@ local did_setup = false
 -- ============================================================================
 local function shell(cmd)
   local h = io.popen(cmd)
-  if not h then return nil end
+  if not h then
+    return nil
+  end
   local out = h:read("*a")
   h:close()
   return out
 end
 
 local function parse_time_arg(arg)
-  if not arg or arg == "" then return nil end
+  if not arg or arg == "" then
+    return nil
+  end
   local num, unit = arg:match("^(%d+)([smhd])$")
   if num then
     local mult = ({ s = 1, m = 60, h = 3600, d = 86400 })[unit]
     return os.time() - (tonumber(num) * mult)
   end
   local out = shell(string.format("date -d %s +%%s 2>/dev/null", vim.fn.shellescape(arg)))
-  if out and out:match("^%d+") then return tonumber(out) end
+  if out and out:match("^%d+") then
+    return tonumber(out)
+  end
   return nil
 end
 
 local function parse_duration_secs(arg)
-  if not arg or arg == "" then return nil end
+  if not arg or arg == "" then
+    return nil
+  end
   local num, unit = arg:match("^(%d+)([smhd])$")
-  if not num then return nil end
+  if not num then
+    return nil
+  end
   local mult = ({ s = 1, m = 60, h = 3600, d = 86400 })[unit]
   return tonumber(num) * mult
 end
 
 local function ext_allowed(filepath, extensions)
-  if not extensions or #extensions == 0 then return true end
+  if not extensions or #extensions == 0 then
+    return true
+  end
   local ext = vim.fn.fnamemodify(filepath, ":e")
   for _, e in ipairs(extensions) do
-    if ext == e then return true end
+    if ext == e then
+      return true
+    end
   end
   return false
 end
@@ -71,12 +85,16 @@ local function collect_files(paths, extensions)
       if h then
         for line in h:lines() do
           local f = vim.fn.fnamemodify(line, ":p")
-          if ext_allowed(f, extensions) then table.insert(files, f) end
+          if ext_allowed(f, extensions) then
+            table.insert(files, f)
+          end
         end
         h:close()
       end
     elseif stat and stat.type == "file" then
-      if ext_allowed(p, extensions) then table.insert(files, vim.fn.fnamemodify(p, ":p")) end
+      if ext_allowed(p, extensions) then
+        table.insert(files, vim.fn.fnamemodify(p, ":p"))
+      end
     end
   end
   return files
@@ -90,7 +108,9 @@ local function get_undo_entries(filepath, window_secs)
   pcall(function()
     local bufnr = vim.fn.bufadd(filepath)
     vim.fn.bufload(bufnr)
-    local ut = vim.api.nvim_buf_call(bufnr, function() return vim.fn.undotree() end)
+    local ut = vim.api.nvim_buf_call(bufnr, function()
+      return vim.fn.undotree()
+    end)
     local function walk(list)
       for _, node in ipairs(list) do
         if node.time >= cutoff then
@@ -98,13 +118,19 @@ local function get_undo_entries(filepath, window_secs)
         elseif not older or node.time > older.time then
           older = { file = filepath, seq = node.seq, time = node.time }
         end
-        if node.alt then walk(node.alt) end
+        if node.alt then
+          walk(node.alt)
+        end
       end
     end
-    if ut and ut.entries then walk(ut.entries) end
+    if ut and ut.entries then
+      walk(ut.entries)
+    end
     vim.api.nvim_buf_delete(bufnr, { force = true })
   end)
-  if older then table.insert(entries, older) end
+  if older then
+    table.insert(entries, older)
+  end
   return entries
 end
 
@@ -113,7 +139,9 @@ local function content_at_seq(filepath, seq)
   pcall(function()
     local bufnr = vim.fn.bufadd(filepath)
     vim.fn.bufload(bufnr)
-    vim.api.nvim_buf_call(bufnr, function() pcall(vim.cmd, "silent undo " .. seq) end)
+    vim.api.nvim_buf_call(bufnr, function()
+      pcall(vim.cmd, "silent undo " .. seq)
+    end)
     lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     vim.api.nvim_buf_delete(bufnr, { force = true })
   end)
@@ -123,22 +151,32 @@ end
 local function seq_at_time(entries, target_time)
   local best = nil
   for _, e in ipairs(entries) do
-    if e.time <= target_time and (not best or e.time > best.time) then best = e end
+    if e.time <= target_time and (not best or e.time > best.time) then
+      best = e
+    end
   end
   return best and best.seq or 0
 end
 
 local function human_ago(s)
-  if s < 60 then return s .. "s ago" end
-  if s < 3600 then return math.floor(s / 60) .. "m ago" end
+  if s < 60 then
+    return s .. "s ago"
+  end
+  if s < 3600 then
+    return math.floor(s / 60) .. "m ago"
+  end
 
   local d = math.floor(s / 86400)
   local h = math.floor((s % 86400) / 3600)
   local m = math.floor((s % 3600) / 60)
 
   local parts = {}
-  if d > 0 then table.insert(parts, d .. "d") end
-  if h > 0 or d > 0 then table.insert(parts, h .. "h") end
+  if d > 0 then
+    table.insert(parts, d .. "d")
+  end
+  if h > 0 or d > 0 then
+    table.insert(parts, h .. "h")
+  end
   table.insert(parts, m .. "m") -- always show minutes once we're at 1h+
 
   return table.concat(parts, " ") .. " ago"
@@ -150,10 +188,14 @@ local function file_diff(filepath, old_lines)
   local current = vim.fn.readfile(filepath)
   local old_text = table.concat(old_lines, "\n") .. "\n"
   local new_text = table.concat(current, "\n") .. "\n"
-  if old_text == new_text then return nil end
+  if old_text == new_text then
+    return nil
+  end
   local rel = vim.fn.fnamemodify(filepath, ":.")
   local diff = vim.diff(old_text, new_text, { result_type = "unified", ctxlen = 3 })
-  if not diff or diff == "" then return nil end
+  if not diff or diff == "" then
+    return nil
+  end
 
   local added, removed = 0, 0
   for line in diff:gmatch("[^\n]+") do
@@ -192,7 +234,9 @@ function M.show_diff(diff_text, reopen_picker_fn)
     vim.keymap.set("n", "t", reopen_picker_fn, { buffer = diff_state.buf, desc = "Switch point in time" })
   end
   vim.keymap.set("n", "q", function()
-    if vim.api.nvim_win_is_valid(diff_state.win) then vim.api.nvim_win_close(diff_state.win, true) end
+    if vim.api.nvim_win_is_valid(diff_state.win) then
+      vim.api.nvim_win_close(diff_state.win, true)
+    end
   end, { buffer = diff_state.buf, desc = "Close diff" })
 
   vim.cmd("startinsert")
@@ -214,9 +258,17 @@ local function scan(paths, extensions, window_secs)
       vim.cmd("redraw")
     end
     local entries = get_undo_entries(f, window_secs)
-    if #entries > 0 then per_file_entries[f] = entries end
+    if #entries > 0 then
+      per_file_entries[f] = entries
+    end
   end
-  vim.notify(string.format("wayback: done. %d files touched in the last %dh.", vim.tbl_count(per_file_entries), window_secs / 3600))
+  vim.notify(
+    string.format(
+      "wayback: done. %d files touched in the last %dh.",
+      vim.tbl_count(per_file_entries),
+      window_secs / 3600
+    )
+  )
   return per_file_entries
 end
 
@@ -226,7 +278,9 @@ end
 -- ============================================================================
 local function diff_one(filepath, target_time, per_file_entries, window_secs, paths, extensions)
   local entries = per_file_entries[filepath]
-  if not entries then return end
+  if not entries then
+    return
+  end
   local seq = seq_at_time(entries, target_time)
   local old_lines = content_at_seq(filepath, seq)
   if not old_lines then
@@ -238,7 +292,9 @@ local function diff_one(filepath, target_time, per_file_entries, window_secs, pa
     vim.notify("wayback: no changes at that point in time.", vim.log.levels.INFO)
     return
   end
-  M.show_diff(d, function() M.open_picker(per_file_entries, window_secs, paths, extensions) end)
+  M.show_diff(d, function()
+    M.open_picker(per_file_entries, window_secs, paths, extensions)
+  end)
 end
 
 -- ============================================================================
@@ -265,14 +321,18 @@ function M.run(opts)
       local old_lines = content_at_seq(f, seq)
       if old_lines then
         local d = file_diff(f, old_lines)
-        if d then table.insert(parts, d) end
+        if d then
+          table.insert(parts, d)
+        end
       end
     end
     if #parts == 0 then
       vim.notify("wayback: no changes found for that point in time.", vim.log.levels.INFO)
       return
     end
-    M.show_diff(table.concat(parts, "\n"), function() M.open_picker(per_file_entries, window_secs, paths, extensions) end)
+    M.show_diff(table.concat(parts, "\n"), function()
+      M.open_picker(per_file_entries, window_secs, paths, extensions)
+    end)
     return
   end
 
@@ -311,7 +371,9 @@ function M.open_picker(per_file_entries, window_secs, paths, extensions)
     end
   end
 
-  table.sort(rows, function(a, b) return a.time > b.time end)
+  table.sort(rows, function(a, b)
+    return a.time > b.time
+  end)
 
   if #rows == 0 then
     vim.notify("wayback: no changes found in the scanned window.", vim.log.levels.INFO)
@@ -350,62 +412,69 @@ function M.open_picker(per_file_entries, window_secs, paths, extensions)
       local lines = { "(no diff)" }
       if old_lines then
         local d = file_diff(r.file, old_lines)
-        if d then lines = vim.split(d, "\n") end
+        if d then
+          lines = vim.split(d, "\n")
+        end
       end
       vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
       vim.bo[self.state.bufnr].filetype = "diff"
     end,
   })
 
-  pickers.new({}, {
-    prompt_title = string.format("wayback: changes (last %dh) -- <CR> diff, R rescan further back", window_secs / 3600),
-    finder = finders.new_table({
-      results = rows,
-      entry_maker = function(r)
-        return {
-          value = r,
-          ordinal = r.rel .. " " .. human_ago(r.ago),
-          display = function(entry)
-            local rr = entry.value
-            local hl = rr.ago >= 86400 and "Comment" or rr.ago >= 3600 and "WarningMsg" or "Normal"
-            local stats = string.format("+%d -%d ~%d", rr.added, rr.removed, rr.changed)
-            return displayer({
-              { human_ago(rr.ago), hl },
-              { os.date("%Y-%m-%d %H:%M:%S", rr.time), hl },
-              { rr.rel, "Identifier" },
-              { stats, "DiffText" },
-            })
-          end,
-        }
-      end,
-    }),
-    sorter = conf.generic_sorter({}),
-    previewer = previewer,
-    attach_mappings = function(prompt_bufnr, map)
-      actions.select_default:replace(function()
-        local selection = action_state.get_selected_entry()
-        if not selection then
-          vim.notify("wayback: no entry selected.", vim.log.levels.WARN)
-          return
-        end
-        actions.close(prompt_bufnr)
-        diff_one(selection.value.file, selection.value.time, per_file_entries, window_secs, paths, extensions)
-      end)
-      map("n", "R", function()
-        actions.close(prompt_bufnr)
-        vim.ui.input({ prompt = "Rescan how far back? (e.g. 3d, 7d): " }, function(input)
-          local secs = parse_duration_secs(input)
-          if not secs then
-            vim.notify("wayback: invalid duration, expected e.g. '3d' or '12h'.", vim.log.levels.ERROR)
+  pickers
+    .new({}, {
+      prompt_title = string.format(
+        "wayback: changes (last %dh) -- <CR> diff, R rescan further back",
+        window_secs / 3600
+      ),
+      finder = finders.new_table({
+        results = rows,
+        entry_maker = function(r)
+          return {
+            value = r,
+            ordinal = r.rel .. " " .. human_ago(r.ago),
+            display = function(entry)
+              local rr = entry.value
+              local hl = rr.ago >= 86400 and "Comment" or rr.ago >= 3600 and "WarningMsg" or "Normal"
+              local stats = string.format("+%d -%d ~%d", rr.added, rr.removed, rr.changed)
+              return displayer({
+                { human_ago(rr.ago), hl },
+                { os.date("%Y-%m-%d %H:%M:%S", rr.time), hl },
+                { rr.rel, "Identifier" },
+                { stats, "DiffText" },
+              })
+            end,
+          }
+        end,
+      }),
+      sorter = conf.generic_sorter({}),
+      previewer = previewer,
+      attach_mappings = function(prompt_bufnr, map)
+        actions.select_default:replace(function()
+          local selection = action_state.get_selected_entry()
+          if not selection then
+            vim.notify("wayback: no entry selected.", vim.log.levels.WARN)
             return
           end
-          local new_entries = scan(paths, extensions, secs)
-          M.open_picker(new_entries, secs, paths, extensions)
+          actions.close(prompt_bufnr)
+          diff_one(selection.value.file, selection.value.time, per_file_entries, window_secs, paths, extensions)
         end)
-      end, { desc = "Rescan further back (explicit)" })
-      return true
-    end,
-  }):find()
+        map("n", "R", function()
+          actions.close(prompt_bufnr)
+          vim.ui.input({ prompt = "Rescan how far back? (e.g. 3d, 7d): " }, function(input)
+            local secs = parse_duration_secs(input)
+            if not secs then
+              vim.notify("wayback: invalid duration, expected e.g. '3d' or '12h'.", vim.log.levels.ERROR)
+              return
+            end
+            local new_entries = scan(paths, extensions, secs)
+            M.open_picker(new_entries, secs, paths, extensions)
+          end)
+        end, { desc = "Rescan further back (explicit)" })
+        return true
+      end,
+    })
+    :find()
 end
 
 -- ============================================================================
@@ -414,7 +483,9 @@ end
 function M.setup(opts)
   M.config = vim.tbl_deep_extend("force", M.config, opts or {})
 
-  if did_setup then return end
+  if did_setup then
+    return
+  end
   did_setup = true
 
   vim.api.nvim_create_user_command("WaybackDiff", function(cmd_opts)
@@ -428,7 +499,11 @@ function M.setup(opts)
     M.run({
       paths = cmd_opts.args ~= "" and { cmd_opts.args } or nil,
     })
-  end, { nargs = "?", complete = "file", desc = "WaybackDirDiff [path]  -- browse changes in the last 24h (picker); press R inside to go further back" })
+  end, {
+    nargs = "?",
+    complete = "file",
+    desc = "WaybackDirDiff [path]  -- browse changes in the last 24h (picker); press R inside to go further back",
+  })
 end
 
 return M
